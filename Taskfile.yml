@@ -1,0 +1,49 @@
+version: "3"
+
+dotenv: [".env"]
+
+vars:
+  SCRIPT: gemini_quota_manager.py
+
+tasks:
+  default:
+    desc: List available tasks
+    cmd: task --list
+
+  deps:
+    desc: Check required tools are installed
+    cmds:
+      - cmd: uv --version
+      - cmd: task --version
+      - cmd: gcloud --version
+
+  setup:
+    desc: Enable GCP APIs (gcloud default project, .env GCP_PROJECT, or task setup -- PROJECT)
+    cmds:
+      - bash scripts/enable-gcp-apis.sh {{.CLI_ARGS}}
+
+  init:
+    desc: Install dev dependencies (ruff, pytest)
+    cmd: uv sync --group dev
+
+  lint:
+    desc: Run ruff lint and format checks
+    deps: [init]
+    cmds:
+      - uv run ruff check .
+      - uv run ruff format --check .
+
+  format:
+    desc: Auto-fix and format with ruff
+    deps: [init]
+    cmds:
+      - uv run ruff check --fix .
+      - uv run ruff format .
+
+  test:
+    desc: Run pytest unit tests
+    cmd: uv run pytest tests/ -v
+
+  tests:
+    desc: Alias for test
+    cmd: task test

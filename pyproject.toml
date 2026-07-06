@@ -1,0 +1,29 @@
+[project]
+name = "gemini-quota-manager"
+version = "0.3.0"
+description = "Manage Gemini API quotas on Google Cloud via the Cloud Quotas API"
+requires-python = ">=3.10"
+readme = "README.md"
+dependencies = [
+    "google-auth>=2.29.0",
+    "requests>=2.31.0",
+    "rich>=13.7.0",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0.0",
+    "ruff>=0.9.0",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+
+[tool.ruff]
+line-length = 200
+target-version = "py310"
+extend-exclude = [".venv", ".pytest_cache"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
