@@ -13,12 +13,21 @@ dependencies = [
 [dependency-groups]
 dev = [
     "pytest>=8.0.0",
+    "pytest-cov>=6.0.0",
     "ruff>=0.9.0",
 ]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["."]
+
+[tool.coverage.run]
+source = ["gemini_quota_manager"]
+
+[tool.coverage.report]
+fail_under = 80
+show_missing = true
+skip_empty = true
 
 [tool.ruff]
 line-length = 200

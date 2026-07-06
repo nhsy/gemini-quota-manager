@@ -42,6 +42,11 @@ tasks:
     desc: Run pytest unit tests
     cmd: uv run pytest tests/ -v
 
+  test:coverage:
+    desc: Run pytest with coverage report (min 80%)
+    deps: [init]
+    cmd: uv run pytest tests/ --cov=gemini_quota_manager --cov-report=term-missing --cov-fail-under=80
+
   tests:
     desc: Alias for test
     cmd: task test

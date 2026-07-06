@@ -419,3 +419,216 @@ class TestCmdUpdateInterrupt:
             gqm.cmd_update(args)
         assert exc.value.code == gqm.EXIT_INTERRUPTED
         assert mock_process.call_count == 2
+
+
+class TestRequestWithBackoff:
+    @patch.object(gqm.time, "sleep")
+    @patch.object(gqm.requests, "request")
+    def test_retries_on_429_then_succeeds(self, mock_request: MagicMock, _mock_sleep: MagicMock) -> None:
+        rate_limited = MagicMock(status_code=429, headers={})
+        ok = MagicMock(status_code=200, text="{}")
+        mock_request.side_effect = [rate_limited, ok]
+        limiter = gqm.RateLimiter(rate=100.0)
+        resp = gqm.request_with_backoff(limiter, "GET", "https://example.com", max_retries=2)
+        assert resp.status_code == 200
+        assert mock_request.call_count == 2
+
+
+class TestListQuotaInfos:
+    @patch.object(gqm, "request_with_backoff")
+    def test_paginates_quota_infos(self, mock_request: MagicMock) -> None:
+        mock_request.side_effect = [
+            MagicMock(status_code=200, json=lambda: {"quotaInfos": [{"quotaId": "q1"}], "nextPageToken": "t2"}),
+            MagicMock(status_code=200, json=lambda: {"quotaInfos": [{"quotaId": "q2"}]}),
+        ]
+        limiter = gqm.RateLimiter(rate=100.0)
+        infos = gqm.list_quota_infos("p", gqm.DEFAULT_SERVICE, _auth_headers(), limiter, 1)
+        assert len(infos) == 2
+        assert mock_request.call_count == 2
+
+    @patch.object(gqm, "request_with_backoff")
+    def test_api_error_exits(self, mock_request: MagicMock) -> None:
+        mock_request.return_value = MagicMock(status_code=403, text="denied")
+        limiter = gqm.RateLimiter(rate=100.0)
+        with pytest.raises(SystemExit) as exc:
+            gqm.list_quota_infos("p", gqm.DEFAULT_SERVICE, _auth_headers(), limiter, 1)
+        assert exc.value.code == gqm.EXIT_ERROR
+
+
+class TestListQuotaPreferences:
+    @patch.object(gqm, "request_with_backoff")
+    def test_lists_preferences(self, mock_request: MagicMock) -> None:
+        mock_request.return_value = MagicMock(
+            status_code=200,
+            json=lambda: {"quotaPreferences": [{"name": "projects/p/locations/global/quotaPreferences/x"}]},
+        )
+        limiter = gqm.RateLimiter(rate=100.0)
+        prefs = gqm.list_quota_preferences("p", _auth_headers(), limiter, 1)
+        assert len(prefs) == 1
+
+
+class TestBuildPreferenceLookup:
+    def test_skips_entries_without_name(self) -> None:
+        lookup = gqm.build_preference_lookup([{"service": gqm.DEFAULT_SERVICE, "quotaId": "q", "dimensions": {}}])
+        assert lookup == {}
+
+
+class TestGeminiModelTierUnknown:
+    def test_unknown_tier_suffix(self) -> None:
+        assert gqm.gemini_model_tier("gemini-2.5-thinking") == (2, 5, gqm.TIER_UNKNOWN)
+
+
+class TestFormatReportedValueEdge:
+    def test_none_reported_value(self) -> None:
+        assert gqm.format_reported_value(_quota_match(reported_value=None)) == "-"
+
+
+class TestApplyUpdateFailure:
+    @patch.object(gqm, "request_with_backoff")
+    def test_returns_false_on_error(self, mock_request: MagicMock) -> None:
+        mock_request.return_value = MagicMock(status_code=400, text="bad")
+        match = _quota_match()
+        limiter = gqm.RateLimiter(rate=100.0)
+        ok = gqm.apply_update("my-proj", gqm.DEFAULT_SERVICE, _auth_headers(), match, 100, False, limiter, 1)
+        assert ok is False
+
+
+class TestCmdList:
+    @patch.object(gqm, "find_matching_quotas")
+    @patch.object(gqm, "get_auth_headers")
+    def test_cmd_list_prints_matches(self, _mock_auth: MagicMock, mock_find: MagicMock) -> None:
+        mock_find.return_value = [_quota_match()]
+        args = argparse.Namespace(
+            project="p",
+            service=gqm.DEFAULT_SERVICE,
+            filters=gqm.DEFAULT_FILTERS,
+            models=gqm.DEFAULT_MODELS,
+            exclude_models=[],
+            max_retries=1,
+            rps=10.0,
+            burst=1,
+            value=gqm.DEFAULT_CAP_VALUE,
+        )
+        gqm.cmd_list(args)
+        mock_find.assert_called_once()
+
+
+class TestProcessQuotaUpdateOutcomes:
+    @patch.object(gqm, "apply_update", return_value=True)
+    def test_unlimited_quota_proceeds(self, mock_apply: MagicMock) -> None:
+        match = _quota_match(reported_value="-1")
+        args = argparse.Namespace(project="p", service=gqm.DEFAULT_SERVICE, skip_unknown_values=False, max_retries=1)
+        limiter = gqm.RateLimiter(rate=10.0)
+        outcome, ok = gqm.process_quota_update(match, 1000, args, _auth_headers(), limiter, True, [], {})
+        assert outcome == "applied"
+        assert ok is True
+        mock_apply.assert_called_once()
+
+    def test_skipped_at_target(self) -> None:
+        match = _quota_match(reported_value="1000")
+        args = argparse.Namespace(project="p", service=gqm.DEFAULT_SERVICE, skip_unknown_values=False, max_retries=1)
+        limiter = gqm.RateLimiter(rate=10.0)
+        outcome, ok = gqm.process_quota_update(match, 1000, args, _auth_headers(), limiter, True, [], {})
+        assert outcome == "skipped_at_target"
+        assert ok is False
+
+    @patch.object(gqm, "apply_update", return_value=True)
+    def test_skipped_unknown_when_flag_set(self, _mock_apply: MagicMock) -> None:
+        match = _quota_match(reported_value="n/a")
+        args = argparse.Namespace(project="p", service=gqm.DEFAULT_SERVICE, skip_unknown_values=True, max_retries=1)
+        limiter = gqm.RateLimiter(rate=10.0)
+        outcome, ok = gqm.process_quota_update(match, 1000, args, _auth_headers(), limiter, True, [], {})
+        assert outcome == "skipped_unknown"
+        assert ok is False
+
+
+class TestCmdUpdateOutcomes:
+    @patch.object(gqm, "list_quota_preferences", return_value=[])
+    @patch.object(gqm, "find_matching_quotas", return_value=[])
+    @patch.object(gqm, "get_auth_headers")
+    def test_no_matches_returns_early(self, _mock_auth: MagicMock, _mock_find: MagicMock, _mock_prefs: MagicMock) -> None:
+        args = argparse.Namespace(
+            project="p",
+            service=gqm.DEFAULT_SERVICE,
+            filters=gqm.DEFAULT_FILTERS,
+            models=gqm.DEFAULT_MODELS,
+            exclude_models=[],
+            value=1000,
+            apply=False,
+            ack_decrease_risks=True,
+            max_retries=1,
+            rps=10.0,
+            burst=1,
+        )
+        gqm.cmd_update(args)
+
+    @patch.object(gqm, "list_quota_preferences", return_value=[])
+    @patch.object(gqm, "process_quota_update")
+    @patch.object(gqm, "find_matching_quotas")
+    @patch.object(gqm, "get_auth_headers")
+    def test_partial_failure_exits_two(
+        self,
+        _mock_auth: MagicMock,
+        mock_find: MagicMock,
+        mock_process: MagicMock,
+        _mock_prefs: MagicMock,
+    ) -> None:
+        mock_find.return_value = [_quota_match()]
+        mock_process.return_value = ("applied", False)
+        args = argparse.Namespace(
+            project="p",
+            service=gqm.DEFAULT_SERVICE,
+            filters=gqm.DEFAULT_FILTERS,
+            models=gqm.DEFAULT_MODELS,
+            exclude_models=[],
+            value=1000,
+            apply=True,
+            ack_decrease_risks=True,
+            max_retries=1,
+            rps=10.0,
+            burst=1,
+        )
+        with pytest.raises(SystemExit) as exc:
+            gqm.cmd_update(args)
+        assert exc.value.code == gqm.EXIT_PARTIAL
+
+    @patch.object(gqm, "list_quota_preferences", return_value=[])
+    @patch.object(gqm, "process_quota_update")
+    @patch.object(gqm, "find_matching_quotas")
+    @patch.object(gqm, "get_auth_headers")
+    def test_counts_skip_outcomes(
+        self,
+        _mock_auth: MagicMock,
+        mock_find: MagicMock,
+        mock_process: MagicMock,
+        _mock_prefs: MagicMock,
+    ) -> None:
+        mock_find.return_value = [_quota_match(), _quota_match(dimensions={"model": "gemini-2.5-pro"})]
+        mock_process.side_effect = [
+            ("skipped_at_target", False),
+            ("skipped_unknown", False),
+        ]
+        args = argparse.Namespace(
+            project="p",
+            service=gqm.DEFAULT_SERVICE,
+            filters=gqm.DEFAULT_FILTERS,
+            models=gqm.DEFAULT_MODELS,
+            exclude_models=[],
+            value=1000,
+            apply=False,
+            ack_decrease_risks=True,
+            max_retries=1,
+            rps=10.0,
+            burst=1,
+        )
+        gqm.cmd_update(args)
+        assert mock_process.call_count == 2
+
+
+class TestMain:
+    @patch.object(gqm, "parse_args")
+    def test_keyboard_interrupt_exits_130(self, mock_parse: MagicMock) -> None:
+        mock_parse.side_effect = KeyboardInterrupt()
+        with pytest.raises(SystemExit) as exc:
+            gqm.main()
+        assert exc.value.code == gqm.EXIT_INTERRUPTED

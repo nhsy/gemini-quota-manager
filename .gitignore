@@ -1,7 +1,25 @@
+# Virtual environments
 .venv/
+
+# Python bytecode and caches
 __pycache__/
 *.py[cod]
+*.pyo
+*.pyd
+.Python
+
+# Test / lint / coverage
 .pytest_cache/
 .ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+
+# Build artifacts
+dist/
+build/
+*.egg-info/
+
+# Local scratch and agent plans
 .tmp/
 .plans/
