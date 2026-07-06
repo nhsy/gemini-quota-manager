@@ -72,16 +72,14 @@ gcloud config set project YOUR_PROJECT_ID
 Both APIs must be enabled on the **same project** you pass to `--project`.
 
 ```bash
-# Option A: use gcloud's active project (interactive confirmation prompt)
-gcloud config set project YOUR_PROJECT_ID
-task setup
-
-# Option B: pass project explicitly (prompts to set gcloud config after enable)
-GCP_PROJECT=YOUR_PROJECT_ID task setup
-# or
+# Option A: pass project as argument
 task setup -- YOUR_PROJECT_ID
 
-# Option C: copy .env.template → .env, set GCP_PROJECT, then:
+# Option B: pass project via environment
+GCP_PROJECT=YOUR_PROJECT_ID task setup
+
+# Option C: use gcloud's active project (interactive confirmation prompt)
+gcloud config set project YOUR_PROJECT_ID
 task setup
 ```
 

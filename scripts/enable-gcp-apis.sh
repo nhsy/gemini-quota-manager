@@ -17,7 +17,6 @@ usage() {
   echo "  task setup -- your-project-id" >&2
   echo "  GCP_PROJECT=your-project-id task setup" >&2
   echo "  gcloud config set project your-project-id   # then: task setup" >&2
-  echo "  cp .env.template .env   # set GCP_PROJECT, then: task setup" >&2
   exit 1
 }
 

@@ -66,7 +66,7 @@ This matches paid tier 2/3 + priority variants (~144 rows on a typical project: 
    ```bash
    gcloud services enable cloudquotas.googleapis.com generativelanguage.googleapis.com --project=YOUR_PROJECT_ID
    ```
-   Or: `task setup` / `GCP_PROJECT=YOUR_PROJECT_ID task setup`
+   Or: `task setup -- YOUR_PROJECT_ID` / `GCP_PROJECT=YOUR_PROJECT_ID task setup`
 
 2. **IAM**
 

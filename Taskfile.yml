@@ -1,7 +1,5 @@
 version: "3"
 
-dotenv: [".env"]
-
 vars:
   SCRIPT: gemini_quota_manager.py
 
@@ -18,7 +16,7 @@ tasks:
       - cmd: gcloud --version
 
   setup:
-    desc: Enable GCP APIs (gcloud default project, .env GCP_PROJECT, or task setup -- PROJECT)
+    desc: Enable GCP APIs (task setup -- PROJECT, GCP_PROJECT=…, or gcloud config)
     cmds:
       - bash scripts/enable-gcp-apis.sh {{.CLI_ARGS}}
 
