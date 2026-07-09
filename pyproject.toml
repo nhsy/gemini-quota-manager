@@ -4,6 +4,7 @@ version = "0.3.0"
 description = "Manage Gemini API quotas on Google Cloud via the Cloud Quotas API"
 requires-python = ">=3.10"
 readme = "README.md"
+license = "MPL-2.0"
 dependencies = [
     "google-auth>=2.29.0",
     "requests>=2.31.0",

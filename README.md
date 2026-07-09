@@ -299,3 +299,9 @@ task format  # auto-fix formatting
 | `1` | Fatal error (auth, API, missing flags) |
 | `2` | Partial failure (some QuotaPreference writes failed) |
 | `130` | Interrupted (Ctrl+C during `update`) |
+
+---
+
+## License
+
+[MPL-2.0](LICENSE)
